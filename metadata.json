@@ -1,0 +1,5 @@
+{
+  "name": "Smart-Ass LUT Generator",
+  "description": "A React-based tool to generate color grading LUTs for SPT/EFT, featuring real-time canvas preview, OLED fix adjustments, and atmosphere controls.",
+  "requestFramePermissions": []
+}
