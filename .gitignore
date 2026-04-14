@@ -15,6 +15,9 @@ dist-ssr
 # Reference/development files (not tracked)
 ref/
 
+# Claude Code local files
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
