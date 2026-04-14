@@ -149,7 +149,11 @@ const computeBypassOverride = (bypassedGroups: Set<GroupName>, settings: LutSett
     };
   }
   if (bypassedGroups.has('zones')) {
-    override.zones = DEFAULT_SETTINGS.zones;
+    // Zones (ranges) bypass: only reset the ranges, not the RGB/L color wheel values
+    override.zones = {
+      ...settings.zones,
+      ranges: DEFAULT_SETTINGS.zones.ranges,
+    };
   }
 
   // Secondary curves — merge carefully
@@ -169,11 +173,12 @@ const computeBypassOverride = (bypassedGroups: Set<GroupName>, settings: LutSett
   }
 
   if (bypassedGroups.has('colorWheels')) {
+    // Color wheels bypass: reset RGB and L offsets for all zones
     override.zones = {
       ...settings.zones,
-      shadows:    { ...settings.zones.shadows,    r: 0, g: 0, b: 0 },
-      midtones:   { ...settings.zones.midtones,   r: 0, g: 0, b: 0 },
-      highlights: { ...settings.zones.highlights, r: 0, g: 0, b: 0 },
+      shadows:    { ...settings.zones.shadows,    r: 0, g: 0, b: 0, l: 0 },
+      midtones:   { ...settings.zones.midtones,   r: 0, g: 0, b: 0, l: 0 },
+      highlights: { ...settings.zones.highlights, r: 0, g: 0, b: 0, l: 0 },
     };
   }
   if (bypassedGroups.has('toneMapping')) {
@@ -284,7 +289,8 @@ export const Controls = React.memo<ControlsProps>(({
     } else if (group === 'curves') {
       resetSettings = { curves: DEFAULT_SETTINGS.curves };
     } else if (group === 'zones') {
-      resetSettings = { zones: DEFAULT_SETTINGS.zones };
+      // Reset only the ranges, keep color wheel values
+      resetSettings = { zones: { ...settings.zones, ranges: DEFAULT_SETTINGS.zones.ranges } };
     } else if (group === 'hueVsHue') {
       resetSettings = { secondaries: { ...settings.secondaries, hueVsHue: [] } };
     } else if (group === 'hueVsSat') {
@@ -294,12 +300,13 @@ export const Controls = React.memo<ControlsProps>(({
     } else if (group === 'lumaVsSat') {
       resetSettings = { secondaries: { ...settings.secondaries, lumaVsSat: [] } };
     } else if (group === 'colorWheels') {
+      // Reset RGB and L offsets for all zones
       resetSettings = {
         zones: {
           ...settings.zones,
-          shadows:    { ...settings.zones.shadows,    r: 0, g: 0, b: 0 },
-          midtones:   { ...settings.zones.midtones,   r: 0, g: 0, b: 0 },
-          highlights: { ...settings.zones.highlights, r: 0, g: 0, b: 0 },
+          shadows:    { ...settings.zones.shadows,    r: 0, g: 0, b: 0, l: 0 },
+          midtones:   { ...settings.zones.midtones,   r: 0, g: 0, b: 0, l: 0 },
+          highlights: { ...settings.zones.highlights, r: 0, g: 0, b: 0, l: 0 },
         },
       };
     } else if (group === 'toneMapping') {

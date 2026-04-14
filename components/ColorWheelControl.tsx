@@ -98,7 +98,7 @@ export const ColorWheelControl: React.FC<ColorWheelProps> = ({ label, zone, onCh
 
     // Indicator dot
     const mag = Math.sqrt(dotX * dotX + dotY * dotY);
-    const dotColor = mag < 0.05 ? '#ffffff' : `hsl(${Math.round(Math.atan2(dotY, dotX) * 180 / Math.PI + 360) % 360}, 90%, 65%)`;
+    const dotColor = mag < 0.05 ? '#ffffff' : `hsl(${Math.round((Math.atan2(dotX, dotY) * 180 / Math.PI + 360) % 360)}, 90%, 65%)`;
 
     ctx.beginPath();
     ctx.arc(dotCanvasX, dotCanvasY, 5, 0, 2 * Math.PI);
@@ -149,8 +149,8 @@ export const ColorWheelControl: React.FC<ColorWheelProps> = ({ label, zone, onCh
 
   // Compute hue (0-360°) and saturation (0-100%) for readout
   const satPct = Math.round(Math.sqrt(dotX * dotX + dotY * dotY) * 100);
-  // Wheel: hue 0 at top (y+), so hue = atan2(dotY, dotX) offset by +90°
-  const hueAngle = Math.round(((Math.atan2(dotY, dotX) * 180 / Math.PI) + 90 + 360) % 360);
+  // With swapped atan2(x, y), hue = atan2(dotX, dotY) directly maps to canvas hue angle
+  const hueAngle = Math.round((Math.atan2(dotX, dotY) * 180 / Math.PI + 360) % 360);
   const lumPct   = Math.round(zone.l * 100);
 
   return (
@@ -177,16 +177,16 @@ export const ColorWheelControl: React.FC<ColorWheelProps> = ({ label, zone, onCh
       </div>
       <span className="text-[10px] text-gray-400 uppercase tracking-widest">{label}</span>
       {/* Luminance offset slider */}
-      <div className="w-full flex items-center gap-1.5 px-1">
+      <div className="w-full flex items-center gap-1.5 px-1 overflow-hidden">
         <span className="text-[9px] text-gray-600 w-3">L</span>
         <input
           type="range"
           min={-0.5}
           max={0.5}
           step={0.01}
-          value={zone.l}
-          onChange={e => onChange({ ...zone, l: parseFloat(e.target.value) })}
-          className="flex-1 h-1 appearance-none rounded-full cursor-pointer accent-cyan-400"
+          value={Math.max(-0.5, Math.min(0.5, zone.l))}
+          onChange={e => onChange({ ...zone, l: Math.max(-0.5, Math.min(0.5, parseFloat(e.target.value))) })}
+          className="flex-1 h-1.5 appearance-none rounded-full cursor-pointer accent-cyan-400 bg-gradient-to-r from-gray-700 to-gray-600 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-cyan-400 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
           title="Luminance offset for this zone"
         />
         <span className="text-[9px] font-mono text-gray-500 w-7 text-right">{lumPct > 0 ? `+${lumPct}` : lumPct}</span>
