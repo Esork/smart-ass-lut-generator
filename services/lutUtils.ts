@@ -213,7 +213,7 @@ export const applyAgxBlend = (
  * The angle maps to the standard colour wheel: 0° = red, 120° = green, 240° = blue.
  */
 export const wheelToRGB = (x: number, y: number): [number, number, number] => {
-  const angle = Math.atan2(y, x); // radians
+  const angle = Math.atan2(x, y); // swap args: aligns visual red (top) with functional red shift
   const mag   = Math.min(1, Math.sqrt(x * x + y * y));
 
   // Project the hue angle into the three primary channels
@@ -236,8 +236,8 @@ export const rgbToWheel = (r: number, g: number, b: number): [number, number] =>
   const ng = g / scale;
   const nb = b / scale;
 
-  // Reconstruct via the pseudo-inverse of the 3-primary projection
-  const x = nr * (2 / 3) - ng * (1 / 3) - nb * (1 / 3);
-  const y = (ng - nb) * (1 / Math.sqrt(3));
+  // Reconstruct via the pseudo-inverse of the 3-primary projection (with swapped x/y due to new angle convention)
+  const x = (ng - nb) * (1 / Math.sqrt(3));
+  const y = nr * (2 / 3) - ng * (1 / 3) - nb * (1 / 3);
   return [x, y];
 };

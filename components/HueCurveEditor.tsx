@@ -89,12 +89,25 @@ export const HueCurveEditor: React.FC<HueCurveEditorProps> = ({ points, onChange
     return 'linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)';
   };
 
+  const getVerticalGradient = () => {
+    // For hueVsHue, show input hue colors on the left (vertical)
+    if (mode === 'hueVsHue') {
+      return 'linear-gradient(to bottom, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)';
+    }
+    return 'linear-gradient(to bottom, #888, #888)';
+  };
+
   return (
     <div className="w-full aspect-square bg-gray-800 rounded-lg relative border border-gray-700 overflow-hidden"
          onMouseMove={handleMouseMove}
          onMouseUp={handleMouseUp}
          onMouseLeave={handleMouseUp}
     >
+      {/* Vertical Hue Band (left side, for hueVsHue mode) */}
+      {mode === 'hueVsHue' && (
+        <div className="absolute left-0 top-0 bottom-0 w-3 pointer-events-none" style={{ background: getVerticalGradient() }}></div>
+      )}
+
       {/* Gradient Bar at Bottom */}
       <div className="absolute bottom-0 left-0 right-0 h-4 opacity-80" style={{ background: getGradient() }}></div>
 
