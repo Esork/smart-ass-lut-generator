@@ -1,5 +1,7 @@
 
 import { LutSettings, Point } from '../types';
+import { convertInputToWorkingSpace } from './colorspaceUtils';
+import { applyToneMappingChannel, applyAgxBlend } from './lutUtils';
 
 /**
  * Helper to clamp values between 0 and 1
@@ -194,9 +196,15 @@ export const applyGradingToPixel = (
   context: ProcessingContext
 ): [number, number, number] => {
   // Normalize 0-1
-  let nr = r / 255; 
-  let ng = g / 255; 
+  let nr = r / 255;
+  let ng = g / 255;
   let nb = b / 255;
+
+  // --- 0. INPUT COLORSPACE CONVERSION ---
+  // Convert from scene colorspace to sRGB working space before all other ops.
+  if (settings.colorspace !== 'sRGB') {
+    [nr, ng, nb] = convertInputToWorkingSpace(nr, ng, nb, settings.colorspace);
+  }
 
   // --- 1. BASIC EXPOSURE & WB ---
   
@@ -381,6 +389,20 @@ export const applyGradingToPixel = (
         const lo = z.highlights.l * highlightMask * 0.5;
         nr += lo; ng += lo; nb += lo;
       }
+  }
+
+  // --- 7. TONE MAPPING ---
+  const tm = settings.toneMapping;
+  const tmActive = tm.toe > 0 || tm.shoulder > 0;
+  if (tmActive) {
+    nr = applyToneMappingChannel(nr, tm);
+    ng = applyToneMappingChannel(ng, tm);
+    nb = applyToneMappingChannel(nb, tm);
+  }
+
+  // --- 8. FILMIC LOOK BLEND ---
+  if (settings.agxBlend > 0 && settings.filmicLook !== 'none') {
+    [nr, ng, nb] = applyAgxBlend(nr, ng, nb, settings.agxBlend, settings.filmicLook);
   }
 
   // --- FINAL CLAMP ---
