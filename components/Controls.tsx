@@ -20,6 +20,7 @@ interface ControlsProps {
   setPreviewOverride: (override: Partial<LutSettings> | null) => void;
   onUpload: (file: File) => void;
   onDownloadImage?: () => void;
+  onLutLoad?: (lut: { name: string; size: number; data: Uint8ClampedArray }) => void;
   isImageLoaded: boolean;
 }
 
@@ -199,12 +200,14 @@ export const Controls = React.memo<ControlsProps>(({
   setPreviewOverride,
   onUpload,
   onDownloadImage,
+  onLutLoad,
   isImageLoaded,
 }) => {
   const [activeTab, setActiveTab]       = useState<Tab>('presets');
   const [activeCurve, setActiveCurve]   = useState<CurveChannel>('master');
   const [activeAdvTab, setActiveAdvTab] = useState<AdvSubTab>('zones');
   const [activePresetCategory, setActivePresetCategory] = useState<'lifestyle' | 'cinematic' | 'film' | 'custom'>('lifestyle');
+  const [loadedLutName, setLoadedLutName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [bypassedGroups, setBypassedGroups] = useState<Set<GroupName>>(new Set());
@@ -653,7 +656,12 @@ export const Controls = React.memo<ControlsProps>(({
                   <div className={bypassedGroups.has('lutBlend') ? 'opacity-40 pointer-events-none select-none' : ''}>
                     <LUTBlendControl
                       value={settings.agxBlend}
-                      onChange={updateAgxBlend}
+                      onChange={v => updateAgxBlend(v)}
+                      onLutLoad={(lut) => {
+                        setLoadedLutName(lut.name);
+                        onLutLoad?.(lut);
+                      }}
+                      loadedLutName={loadedLutName ?? undefined}
                     />
                   </div>
                 </div>

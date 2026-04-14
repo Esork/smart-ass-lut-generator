@@ -30,6 +30,9 @@ const App: React.FC = () => {
   // Ref to the image download function (exposed by PreviewArea)
   const downloadImageRef = useRef<() => void>(() => {});
 
+  // LUT data for blending
+  const [importedLut, setImportedLut] = useState<{ name: string; size: number; data: Uint8ClampedArray } | null>(null);
+
   const lastPushTime = useRef<number>(0);
   const lastPushLabel = useRef<string>('');
 
@@ -141,6 +144,7 @@ const App: React.FC = () => {
           setSettings={setSettingsWithHistory}
           setPreviewOverride={setPreviewOverride}
           onUpload={handleUpload}
+          onLutLoad={setImportedLut}
           isImageLoaded={!!imageSrc}
           onDownloadImage={() => downloadImageRef.current()}
         />
