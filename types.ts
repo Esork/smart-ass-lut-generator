@@ -36,12 +36,33 @@ export interface ZoneSettings {
   highlights: ZoneVector;
 }
 
+// ── Phase 2 types ─────────────────────────────────────────────────────────────
+
+export interface ToneMappingSettings {
+  toe: number;      // 0–1: shadow lift / compress
+  shoulder: number; // 0–1: highlight rolloff strength
+  knee: number;     // 0–1: where shoulder begins (default 0.7)
+}
+
+export type Colorspace = 'sRGB' | 'Linear' | 'LogAlexa' | 'LogSony' | 'LogC3' | 'Cineon';
+
+export const COLORSPACE_LABELS: Record<Colorspace, string> = {
+  sRGB:     'sRGB',
+  Linear:   'Linear',
+  LogAlexa: 'Log Alexa (LogC)',
+  LogSony:  'Log Sony (S-Log2)',
+  LogC3:    'Arri LogC3',
+  Cineon:   'Cineon / Log Film',
+};
+
+// ── Main settings ─────────────────────────────────────────────────────────────
+
 export interface LutSettings {
   // Basic / Exposure
   exposure: number; // In stops
   brightness: number; // Simple Lift/Offset
   offset: number;
-  
+
   // Contrast
   contrast: number;
   pivot: number; // 0.0 to 1.0
@@ -53,15 +74,24 @@ export interface LutSettings {
   // Color
   saturation: number;
   vibrance: number; // Smart saturation
-  
+
   // Curves
   curves: CurveSettings;
 
   // Advanced: Secondaries
   secondaries: SecondaryCurves;
-  
+
   // Advanced: Zones
   zones: ZoneSettings;
+
+  // Phase 2: Tone Mapping
+  toneMapping: ToneMappingSettings;
+
+  // Phase 2: Input Colorspace
+  colorspace: Colorspace;
+
+  // Phase 2: AgX / Filmic LUT blend (0–100)
+  agxBlend: number;
 }
 
 export interface HistoryEntry {
@@ -96,5 +126,12 @@ export const DEFAULT_SETTINGS: LutSettings = {
     shadows: { r: 0, g: 0, b: 0, l: 0 },
     midtones: { r: 0, g: 0, b: 0, l: 0 },
     highlights: { r: 0, g: 0, b: 0, l: 0 }
-  }
+  },
+  toneMapping: {
+    toe: 0,
+    shoulder: 0,
+    knee: 0.7,
+  },
+  colorspace: 'sRGB',
+  agxBlend: 0,
 };

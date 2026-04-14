@@ -135,7 +135,7 @@ const App: React.FC = () => {
         />
       </div>
 
-      <div className="order-2 w-full h-[45vh] md:h-full md:w-96 flex-shrink-0 z-20 border-t md:border-t-0 md:border-l border-gray-800 shadow-2xl">
+      <div className="order-2 w-full h-[45vh] md:h-full md:w-[28rem] flex-shrink-0 z-20 border-t md:border-t-0 md:border-l border-gray-800 shadow-2xl">
         <Controls
           settings={settings}
           setSettings={setSettingsWithHistory}

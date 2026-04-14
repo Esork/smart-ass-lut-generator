@@ -1,11 +1,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { LutSettings, Point, ZoneSettings, DEFAULT_SETTINGS } from '../types';
+import { LutSettings, Point, ZoneSettings, DEFAULT_SETTINGS, Colorspace, ToneMappingSettings } from '../types';
 import { Slider } from './Slider';
 import { generateLutUrl } from '../services/imageProcessing';
 import { CurveEditor } from './CurveEditor';
 import { HueCurveEditor } from './HueCurveEditor';
 import { ZoneControls } from './ZoneControls';
+import { ColorWheelControl } from './ColorWheelControl';
+import { ToneMappingControl } from './ToneMappingControl';
+import { ColorspaceSelector } from './ColorspaceSelector';
+import { LUTBlendControl } from './LUTBlendControl';
 import { PRESETS } from '../presets';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,21 +25,25 @@ interface ControlsProps {
 
 type Tab = 'presets' | 'basic' | 'curves' | 'advanced';
 type CurveChannel = 'master' | 'red' | 'green' | 'blue';
-type AdvSubTab = 'zones' | 'hueVsHue' | 'hueVsSat' | 'hueVsLuma' | 'lumaVsSat';
-type GroupName = 'light' | 'contrast' | 'color' | 'curves' | 'zones' | 'hueVsHue' | 'hueVsSat' | 'hueVsLuma' | 'lumaVsSat';
+type AdvSubTab = 'zones' | 'hueVsHue' | 'hueVsSat' | 'hueVsLuma' | 'lumaVsSat' | 'colorWheels' | 'toneMapping' | 'colorspace' | 'lutBlend';
+type GroupName = 'light' | 'contrast' | 'color' | 'curves' | 'zones' | 'hueVsHue' | 'hueVsSat' | 'hueVsLuma' | 'lumaVsSat' | 'colorWheels' | 'toneMapping' | 'colorspace' | 'lutBlend';
 
 // ── Group labels ──────────────────────────────────────────────────────────────
 
 const GROUP_LABELS: Record<GroupName, string> = {
-  light:     'Light & Exposure',
-  contrast:  'Contrast',
-  color:     'Color Balance',
-  curves:    'Curves',
-  zones:     'Zones',
-  hueVsHue:  'Hue vs Hue',
-  hueVsSat:  'Hue vs Sat',
-  hueVsLuma: 'Hue vs Luma',
-  lumaVsSat: 'Luma vs Sat',
+  light:       'Light & Exposure',
+  contrast:    'Contrast',
+  color:       'Color Balance',
+  curves:      'Curves',
+  zones:       'Zones',
+  hueVsHue:   'Hue vs Hue',
+  hueVsSat:   'Hue vs Sat',
+  hueVsLuma:  'Hue vs Luma',
+  lumaVsSat:  'Luma vs Sat',
+  colorWheels: 'Color Wheels',
+  toneMapping: 'Tone Mapping',
+  colorspace:  'Input Colorspace',
+  lutBlend:    'Filmic LUT Blend',
 };
 
 // ── Action label maps ─────────────────────────────────────────────────────────
@@ -60,11 +68,15 @@ const CURVE_LABELS: Record<CurveChannel, string> = {
 };
 
 const ADV_LABELS: Record<AdvSubTab, string> = {
-  zones:      'Zone Controls',
-  hueVsHue:   'Hue vs Hue',
-  hueVsSat:   'Hue vs Sat',
-  hueVsLuma:  'Hue vs Luma',
-  lumaVsSat:  'Luma vs Sat',
+  zones:       'Zone Controls',
+  hueVsHue:    'Hue vs Hue',
+  hueVsSat:    'Hue vs Sat',
+  hueVsLuma:   'Hue vs Luma',
+  lumaVsSat:   'Luma vs Sat',
+  colorWheels: 'Color Wheels',
+  toneMapping: 'Tone Mapping',
+  colorspace:  'Input Colorspace',
+  lutBlend:    'Filmic LUT Blend',
 };
 
 // ── Small shared components ───────────────────────────────────────────────────
@@ -158,6 +170,24 @@ const computeBypassOverride = (bypassedGroups: Set<GroupName>, settings: LutSett
     };
   }
 
+  if (bypassedGroups.has('colorWheels')) {
+    override.zones = {
+      ...settings.zones,
+      shadows:    { ...settings.zones.shadows,    r: 0, g: 0, b: 0 },
+      midtones:   { ...settings.zones.midtones,   r: 0, g: 0, b: 0 },
+      highlights: { ...settings.zones.highlights, r: 0, g: 0, b: 0 },
+    };
+  }
+  if (bypassedGroups.has('toneMapping')) {
+    override.toneMapping = DEFAULT_SETTINGS.toneMapping;
+  }
+  if (bypassedGroups.has('colorspace')) {
+    override.colorspace = 'sRGB';
+  }
+  if (bypassedGroups.has('lutBlend')) {
+    override.agxBlend = 0;
+  }
+
   return override;
 };
 
@@ -216,6 +246,21 @@ export const Controls = React.memo<ControlsProps>(({
       resetSettings = { secondaries: { ...settings.secondaries, hueVsLuma: [] } };
     } else if (group === 'lumaVsSat') {
       resetSettings = { secondaries: { ...settings.secondaries, lumaVsSat: [] } };
+    } else if (group === 'colorWheels') {
+      resetSettings = {
+        zones: {
+          ...settings.zones,
+          shadows:    { ...settings.zones.shadows,    r: 0, g: 0, b: 0 },
+          midtones:   { ...settings.zones.midtones,   r: 0, g: 0, b: 0 },
+          highlights: { ...settings.zones.highlights, r: 0, g: 0, b: 0 },
+        },
+      };
+    } else if (group === 'toneMapping') {
+      resetSettings = { toneMapping: DEFAULT_SETTINGS.toneMapping };
+    } else if (group === 'colorspace') {
+      resetSettings = { colorspace: 'sRGB' };
+    } else if (group === 'lutBlend') {
+      resetSettings = { agxBlend: 0 };
     }
 
     setSettings(
@@ -256,6 +301,18 @@ export const Controls = React.memo<ControlsProps>(({
 
   const updateZones = (z: ZoneSettings) => {
     setSettings(prev => ({ ...prev, zones: z }), 'Zone Controls');
+  };
+
+  const updateToneMapping = (tm: ToneMappingSettings) => {
+    setSettings(prev => ({ ...prev, toneMapping: tm }), 'Tone Mapping');
+  };
+
+  const updateColorspace = (cs: Colorspace) => {
+    setSettings(prev => ({ ...prev, colorspace: cs }), 'Colorspace');
+  };
+
+  const updateAgxBlend = (v: number) => {
+    setSettings(prev => ({ ...prev, agxBlend: v }), 'Filmic Blend');
   };
 
   const resetCurve = () => {
@@ -315,7 +372,7 @@ export const Controls = React.memo<ControlsProps>(({
   );
 
   return (
-    <div className="w-full md:w-96 bg-gray-850 border-l border-gray-800 flex flex-col h-full shadow-2xl z-10 relative">
+    <div className="w-full md:w-[28rem] bg-gray-850 border-l border-gray-800 flex flex-col h-full shadow-2xl z-10 relative">
 
       {/* ── Header ── */}
       <div className="p-5 border-b border-gray-800 bg-gray-900 flex-shrink-0">
@@ -458,43 +515,126 @@ export const Controls = React.memo<ControlsProps>(({
         {/* ── ADVANCED TAB ── */}
         {activeTab === 'advanced' && (
           <div className="h-full flex flex-col">
-            <div className="flex flex-wrap gap-2 mb-4">
-              {(['zones', 'hueVsHue', 'hueVsSat', 'hueVsLuma', 'lumaVsSat'] as AdvSubTab[]).map(sub => (
+            {/* Sub-tab row — split into two rows for readability */}
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {([
+                ['zones',       'Zones'],
+                ['hueVsHue',    'H-H'],
+                ['hueVsSat',    'H-S'],
+                ['hueVsLuma',   'H-L'],
+                ['lumaVsSat',   'L-S'],
+                ['colorWheels', 'Wheels'],
+                ['toneMapping', 'Tone'],
+                ['colorspace',  'Space'],
+                ['lutBlend',    'Filmic'],
+              ] as [AdvSubTab, string][]).map(([sub, label]) => (
                 <button
                   key={sub}
                   onClick={() => setActiveAdvTab(sub)}
-                  className={`px-3 py-1 text-xs rounded border transition-colors ${
+                  className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-colors ${
                     activeAdvTab === sub
                       ? 'bg-cyan-500 border-cyan-500 text-black'
                       : 'border-gray-700 text-gray-400 hover:text-gray-200'
                   }`}
                 >
-                  {sub === 'zones' ? 'Zones' : sub === 'hueVsHue' ? 'H-H' : sub === 'hueVsSat' ? 'H-S' : sub === 'hueVsLuma' ? 'H-L' : 'L-S'}
+                  {label}
                 </button>
               ))}
             </div>
 
             <div className="flex-1">
+              {/* Zones */}
               {activeAdvTab === 'zones' && (
-                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 h-full flex flex-col">
+                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
                   {groupHeader('zones')}
                   <div className={bypassedGroups.has('zones') ? 'opacity-40 pointer-events-none select-none' : ''}>
                     <ZoneControls zones={settings.zones} onChange={updateZones} />
                   </div>
                 </div>
               )}
-              {activeAdvTab !== 'zones' && (
+
+              {/* Secondary hue curves */}
+              {(['hueVsHue', 'hueVsSat', 'hueVsLuma', 'lumaVsSat'] as AdvSubTab[]).includes(activeAdvTab) && (
                 <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 h-full flex flex-col">
-                  {groupHeader(activeAdvTab as 'hueVsHue' | 'hueVsSat' | 'hueVsLuma' | 'lumaVsSat')}
+                  {groupHeader(activeAdvTab as GroupName)}
                   <div className={bypassedGroups.has(activeAdvTab) ? 'opacity-40 pointer-events-none select-none flex-1' : 'flex-1'}>
                     <HueCurveEditor
-                      mode={activeAdvTab}
-                      points={settings.secondaries[activeAdvTab]}
+                      mode={activeAdvTab as 'hueVsHue' | 'hueVsSat' | 'hueVsLuma' | 'lumaVsSat'}
+                      points={settings.secondaries[activeAdvTab as 'hueVsHue' | 'hueVsSat' | 'hueVsLuma' | 'lumaVsSat']}
                       onChange={updateSecondary}
                     />
                     <div className="mt-4 text-xs text-gray-500 text-center">
                       Left-Click to add point. Drag to adjust. Dbl-Click to remove.
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Color Wheels */}
+              {activeAdvTab === 'colorWheels' && (
+                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+                  {groupHeader('colorWheels')}
+                  <div className={bypassedGroups.has('colorWheels') ? 'opacity-40 pointer-events-none select-none' : ''}>
+                    <p className="text-[10px] text-gray-500 mb-4 leading-relaxed">
+                      Drag to tint a zone. Double-click to reset. The wheel controls the colour
+                      direction of shadows, midtones, and highlights independently.
+                    </p>
+                    <div className="flex justify-around gap-2">
+                      <ColorWheelControl
+                        label="Shadows"
+                        zone={settings.zones.shadows}
+                        onChange={z => updateZones({ ...settings.zones, shadows: z })}
+                      />
+                      <ColorWheelControl
+                        label="Midtones"
+                        zone={settings.zones.midtones}
+                        onChange={z => updateZones({ ...settings.zones, midtones: z })}
+                      />
+                      <ColorWheelControl
+                        label="Highlights"
+                        zone={settings.zones.highlights}
+                        onChange={z => updateZones({ ...settings.zones, highlights: z })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tone Mapping */}
+              {activeAdvTab === 'toneMapping' && (
+                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+                  {groupHeader('toneMapping')}
+                  <div className={bypassedGroups.has('toneMapping') ? 'opacity-40 pointer-events-none select-none' : ''}>
+                    <ToneMappingControl
+                      settings={settings.toneMapping}
+                      onChange={updateToneMapping}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Colorspace */}
+              {activeAdvTab === 'colorspace' && (
+                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+                  {groupHeader('colorspace')}
+                  <div className={bypassedGroups.has('colorspace') ? 'opacity-40 pointer-events-none select-none' : ''}>
+                    <ColorspaceSelector
+                      value={settings.colorspace}
+                      onChange={updateColorspace}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Filmic LUT Blend */}
+              {activeAdvTab === 'lutBlend' && (
+                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+                  {groupHeader('lutBlend')}
+                  <div className={bypassedGroups.has('lutBlend') ? 'opacity-40 pointer-events-none select-none' : ''}>
+                    <LUTBlendControl
+                      value={settings.agxBlend}
+                      onChange={updateAgxBlend}
+                    />
                   </div>
                 </div>
               )}
