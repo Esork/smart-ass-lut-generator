@@ -204,6 +204,7 @@ export const Controls = React.memo<ControlsProps>(({
   const [activeTab, setActiveTab]       = useState<Tab>('presets');
   const [activeCurve, setActiveCurve]   = useState<CurveChannel>('master');
   const [activeAdvTab, setActiveAdvTab] = useState<AdvSubTab>('zones');
+  const [activePresetCategory, setActivePresetCategory] = useState<'lifestyle' | 'cinematic' | 'film' | 'custom'>('lifestyle');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [bypassedGroups, setBypassedGroups] = useState<Set<GroupName>>(new Set());
@@ -408,8 +409,27 @@ export const Controls = React.memo<ControlsProps>(({
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
               Click a preset to apply it as a starting point. Fine-tune from there using the other tabs.
             </p>
+
+            {/* Category sub-tabs */}
+            <div className="flex gap-1.5 mb-4">
+              {(['lifestyle', 'cinematic', 'film', 'custom'] as const).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setActivePresetCategory(cat)}
+                  className={`flex-1 px-2.5 py-1 text-[10px] font-semibold rounded border transition-colors ${
+                    activePresetCategory === cat
+                      ? 'bg-cyan-500 border-cyan-500 text-black'
+                      : 'border-gray-700 text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Presets grid filtered by category */}
             <div className="grid grid-cols-2 gap-3">
-              {PRESETS.map(preset => (
+              {PRESETS.filter(p => p.category === activePresetCategory).map(preset => (
                 <button
                   key={preset.id}
                   onClick={() => setSettings(
