@@ -3,39 +3,21 @@
 ## Current Branch
 feature/color-science-architecture
 
-## Status: Phase 2 Complete ✅
+## Status: Phase 3 Complete ✅
 
 Phase 1 (mixer removal, bypass/reset, web worker) — ✅ Done  
-Phase 2 (color science architecture) — ✅ Done
+Phase 2 (color science architecture) — ✅ Done  
+Phase 3 (preset organization) — ✅ Done
 
 ---
 
-## Phase 3 — Preset Organization & Categorization
-
-### Goal
-Reorganize presets into meaningful categories and add cinematic/film stock presets.
-
-### Work Items
-- [ ] **Modify `presets.ts`**: Add `category` field to preset interface
-  - Categories: `'lifestyle' | 'cinematic' | 'film' | 'custom'`
-  - Assign existing presets to categories
-  - Add new presets: AgX (cinematic), Kodak (film), Fuji (film), DCI (cinematic)
-
-- [ ] **Update `components/Controls.tsx`**:
-  - Presets tab shows sub-tabs: [Lifestyle] [Cinematic] [Film] [Custom]
-  - Grid layout per category
-  - Each preset shows color wheel + tone mapping + colorspace preview
-
-- [ ] **Extend `presets.ts` with new fields**:
-  - `colorWheels` (shadows/midtones/highlights hue/sat)
-  - `toneMapping` (toe, shoulder, knee, strength)
-  - `colorspace` (sRGB Display, Log Alexa, etc.)
-  - `agxBlend` (LUT blend strength if using imported LUT)
-
-### Acceptance Criteria
-- User can click "Cinematic" tab and see AgX, DCI presets
-- Clicking preset applies all new color science settings
-- Each preset category is visually distinct
+## Phase 3 Summary
+✅ Added `category` field to Preset interface (`'lifestyle' | 'cinematic' | 'film' | 'custom'`)  
+✅ Organized all existing presets into categories  
+✅ Added new presets: AgX (cinematic), DCI P3 (cinematic), Kodak Portra 400 (film), Fuji Superia 400 (film)  
+✅ Extended all presets with new Phase 2 fields: `toneMapping`, `colorspace`, `agxBlend`  
+✅ Updated Controls.tsx Presets tab with category sub-tabs [Lifestyle] [Cinematic] [Film] [Custom]  
+✅ Presets now grouped and filtered by category within the UI
 
 ---
 
@@ -259,4 +241,4 @@ Ship to production.
 ---
 
 ## Next Immediate Step
-Start **Phase 3** — Organize presets into categories and add new cinematic/film presets.
+Start **Phase 4** — Implement LUT file loading and blending to support external LUTs (like AgX).
