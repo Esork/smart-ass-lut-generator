@@ -76,6 +76,9 @@ export const LUTBlendControl: React.FC<LUTBlendControlProps> = ({
         max={100}
         step={1}
         onChange={onChange}
+        tooltip={loadedLutName
+          ? `0% = your color grade only. 100% = fully blended with ${loadedLutName}. Mix any ratio in between.`
+          : '0% = your color grade only. 100% = fully filmic/ACES tone-mapped look.'}
       />
 
       {/* LUT File Picker */}

@@ -10,17 +10,19 @@ interface SliderProps {
   defaultValue?: number;
   onChange: (val: number) => void;
   id: string;
+  tooltip?: string;
 }
 
-export const Slider: React.FC<SliderProps> = ({ 
-  label, 
-  value, 
-  min, 
-  max, 
-  step, 
+export const Slider: React.FC<SliderProps> = ({
+  label,
+  value,
+  min,
+  max,
+  step,
   defaultValue = 0,
-  onChange, 
-  id 
+  onChange,
+  id,
+  tooltip,
 }) => {
   const [localVal, setLocalVal] = useState(value.toString());
 
@@ -47,8 +49,8 @@ export const Slider: React.FC<SliderProps> = ({
   return (
     <div className="mb-4">
       <div className="flex justify-between items-center mb-1">
-        <label htmlFor={id} className="text-xs text-gray-400 font-medium tracking-wide uppercase">
-          {label}
+        <label htmlFor={id} title={tooltip} className={`text-xs text-gray-400 font-medium tracking-wide uppercase ${tooltip ? 'cursor-help' : ''}`}>
+          {label}{tooltip && <span className="ml-1 text-gray-600 text-[9px] normal-case font-normal">ⓘ</span>}
         </label>
         <div className="flex items-center space-x-2">
           {isChanged && (

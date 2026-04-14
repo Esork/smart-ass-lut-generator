@@ -4,7 +4,7 @@ import { Controls } from './components/Controls';
 import { PreviewArea } from './components/PreviewArea';
 
 
-const MAX_HISTORY = 10;
+const MAX_HISTORY = 100;
 // Debounce window in ms: same action within this window gets merged into one history entry.
 // Different action types always create a new entry immediately.
 const DEBOUNCE_MS = 600;
@@ -29,9 +29,6 @@ const App: React.FC = () => {
 
   // Ref to the image download function (exposed by PreviewArea)
   const downloadImageRef = useRef<() => void>(() => {});
-
-  // LUT data for blending
-  const [importedLut, setImportedLut] = useState<{ name: string; size: number; data: Uint8ClampedArray } | null>(null);
 
   const lastPushTime = useRef<number>(0);
   const lastPushLabel = useRef<string>('');
@@ -66,6 +63,13 @@ const App: React.FC = () => {
     [commitHistory],
   );
 
+  const handleResetAll = useCallback(() => {
+    setSettings(DEFAULT_SETTINGS);
+    commitHistory([]);
+    lastPushTime.current = 0;
+    lastPushLabel.current = '';
+  }, [commitHistory]);
+
   const handleUndo = useCallback(() => {
     const hist = historyRef.current;
     if (hist.length === 0) return;
@@ -90,12 +94,20 @@ const App: React.FC = () => {
     [commitHistory],
   );
 
-  // Ctrl+Z / Cmd+Z global listener
+  // Ctrl+Z / Cmd+Z + E (export) global listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
+        return;
+      }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === 'e' || e.key === 'E') {
+          e.preventDefault();
+          downloadImageRef.current();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -120,6 +132,8 @@ const App: React.FC = () => {
 
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
+  const [controlsCollapsed, setControlsCollapsed] = useState(false);
+
   return (
     <div
       className="flex flex-col md:flex-row h-screen w-screen bg-black text-white overflow-hidden"
@@ -130,22 +144,49 @@ const App: React.FC = () => {
         <PreviewArea
           imageSrc={imageSrc}
           settings={effectiveSettings}
-          importedLut={importedLut}
           onUndo={handleUndo}
           canUndo={history.length > 0}
           history={history}
           onJumpToHistory={handleJumpToHistory}
           onExportImage={(fn) => { downloadImageRef.current = fn; }}
+          onResetAll={handleResetAll}
         />
       </div>
 
-      <div className="order-2 w-full h-[45vh] md:h-full md:w-[28rem] flex-shrink-0 z-20 border-t md:border-t-0 md:border-l border-gray-800 shadow-2xl">
+      {/* Collapse toggle — sits on the left edge of the controls panel */}
+      <button
+        onClick={() => setControlsCollapsed(c => !c)}
+        title={controlsCollapsed ? 'Expand controls' : 'Collapse controls'}
+        className="hidden md:flex order-2 self-center flex-shrink-0 z-30 items-center justify-center w-6 h-16 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-l-xl text-gray-500 hover:text-gray-200 transition-all cursor-pointer"
+        style={{ marginRight: -1 }}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {controlsCollapsed
+            ? <polyline points="15 18 9 12 15 6" />
+            : <polyline points="9 18 15 12 9 6" />
+          }
+        </svg>
+      </button>
+
+      <div
+        className={`order-3 w-full md:h-full md:w-[28rem] flex-shrink-0 z-20 border-t md:border-t-0 md:border-l border-gray-800 shadow-2xl transition-all duration-300 overflow-hidden
+          ${controlsCollapsed ? 'md:w-0 md:border-l-0 h-0' : 'h-[45vh] md:h-full'}`}
+      >
         <Controls
           settings={settings}
           setSettings={setSettingsWithHistory}
           setPreviewOverride={setPreviewOverride}
           onUpload={handleUpload}
-          onLutLoad={setImportedLut}
           isImageLoaded={!!imageSrc}
           onDownloadImage={() => downloadImageRef.current()}
         />

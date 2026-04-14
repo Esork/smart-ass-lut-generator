@@ -5,15 +5,15 @@ import { applyLutToPixel } from '../services/imageProcessing';
 interface PreviewAreaProps {
   imageSrc: string | null;
   settings: LutSettings;
-  importedLut?: { name: string; size: number; data: Uint8ClampedArray } | null;
   onUndo: () => void;
   canUndo: boolean;
   history: HistoryEntry[];
   onJumpToHistory: (index: number) => void;
   onExportImage?: (download: () => void) => void;
+  onResetAll?: () => void;
 }
 
-type ViewMode = 'preview' | 'original';
+type ViewMode = 'preview' | 'original' | 'split';
 
 // Hard cap on canvas buffer size — good quality vs speed tradeoff
 const MAX_RENDER_PIXELS = 1920 * 1080;
@@ -21,7 +21,7 @@ const MAX_RENDER_PIXELS = 1920 * 1080;
 const settingsAreDefault = (s: LutSettings) =>
   s.exposure === 0 && s.brightness === 0 && s.offset === 0 &&
   s.contrast === 1.0 && s.saturation === 1.0 && s.vibrance === 0 &&
-  s.temperature === 0 && s.tint === 0 &&
+  s.temperature === 0 && s.tint === 0 && s.agxBlend === 0 &&
   s.curves.master.length === 2 && s.curves.red.length === 2 &&
   s.curves.green.length === 2 && s.curves.blue.length === 2 &&
   s.secondaries.hueVsHue.length === 0 && s.secondaries.hueVsSat.length === 0 &&
@@ -36,12 +36,12 @@ const settingsAreDefault = (s: LutSettings) =>
 export const PreviewArea: React.FC<PreviewAreaProps> = ({
   imageSrc,
   settings,
-  importedLut,
   onUndo,
   canUndo,
   history,
   onJumpToHistory,
   onExportImage,
+  onResetAll,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef    = useRef<HTMLCanvasElement>(null);
@@ -83,23 +83,16 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
 
   // ── LUT generation (debounced 50ms, off main thread) ───────────────────────
   useEffect(() => {
-    if (settingsAreDefault(settings) && !importedLut) {
+    if (settingsAreDefault(settings)) {
       lutRef.current = null;
       setLutVersion(v => v + 1); // trigger draw to show un-graded image
       return;
     }
     const id = setTimeout(() => {
-      workerRef.current?.postMessage({
-        settings,
-        importedLut: importedLut ? {
-          name: importedLut.name,
-          size: importedLut.size,
-          data: importedLut.data.buffer, // Transfer the buffer
-        } : null,
-      }, importedLut ? [importedLut.data.buffer] : []);
+      workerRef.current?.postMessage({ settings, importedLut: null });
     }, 50);
     return () => clearTimeout(id);
-  }, [settings, importedLut]);
+  }, [settings]);
 
   // ── Canvas sizing ───────────────────────────────────────────────────────────
   const updateCanvasSize = useCallback(() => {
@@ -190,19 +183,50 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
     const lut = lutRef.current;
     if (!lut) return;
 
-    const imageData = ctx.getImageData(0, 0, w, h);
-    const data = imageData.data;
-    const len  = data.length;
-
-    for (let i = 0; i < len; i += 4) {
-      if (data[i + 3] === 0) continue;
-      const [r, g, b] = applyLutToPixel(data[i], data[i + 1], data[i + 2], lut);
-      data[i]     = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
+    if (viewMode === 'split') {
+      // Right half = graded, left half = original
+      const splitX = Math.floor(w / 2);
+      const imageData = ctx.getImageData(splitX, 0, w - splitX, h);
+      const data = imageData.data;
+      const len  = data.length;
+      for (let i = 0; i < len; i += 4) {
+        if (data[i + 3] === 0) continue;
+        const [r, g, b] = applyLutToPixel(data[i], data[i + 1], data[i + 2], lut);
+        data[i]     = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+      }
+      ctx.putImageData(imageData, splitX, 0);
+      // Draw divider line
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(splitX, 0);
+      ctx.lineTo(splitX, h);
+      ctx.stroke();
+      ctx.restore();
+      // Labels
+      ctx.save();
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText('BEFORE', splitX - 70, 20);
+      ctx.fillText('AFTER', splitX + 10, 20);
+      ctx.restore();
+    } else {
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+      const len  = data.length;
+      for (let i = 0; i < len; i += 4) {
+        if (data[i + 3] === 0) continue;
+        const [r, g, b] = applyLutToPixel(data[i], data[i + 1], data[i + 2], lut);
+        data[i]     = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+      }
+      ctx.putImageData(imageData, 0, 0);
     }
-
-    ctx.putImageData(imageData, 0, 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [originalImage, viewMode, scale, position, lutVersion]);
 
@@ -210,6 +234,21 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
     const id = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(id);
   }, [draw]);
+
+  // ── Keyboard shortcuts (X = split, V = toggle preview/original) ─────────────
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'x' || e.key === 'X') {
+        setViewMode(m => m === 'split' ? 'preview' : 'split');
+      } else if (e.key === 'v' || e.key === 'V') {
+        setViewMode(m => m === 'original' ? 'preview' : 'original');
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
 
   // ── Interaction ─────────────────────────────────────────────────────────────
   const handleWheel = (e: React.WheelEvent) => {
@@ -257,7 +296,7 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
     onExportImage?.(downloadImage);
   }, [downloadImage, onExportImage]);
   const historyPanel = showHistory ? (
-    <div className="absolute top-14 left-4 z-40 w-60 bg-gray-900/97 backdrop-blur-sm border border-gray-700 rounded-xl shadow-2xl flex flex-col max-h-[60vh] overflow-hidden">
+    <div className="absolute top-14 left-4 z-40 w-60 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col max-h-[60vh] overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 flex-shrink-0">
         <span className="text-xs font-bold text-white tracking-wide uppercase">Action History</span>
         <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-white transition-colors leading-none">✕</button>
@@ -290,7 +329,7 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
       </div>
 
       <div className="px-3 py-2 border-t border-gray-800 flex-shrink-0">
-        <p className="text-[9px] text-gray-600 text-center">Click any entry to restore · {history.length}/10 saved</p>
+        <p className="text-[9px] text-gray-600 text-center">Click any entry to restore · {history.length} steps saved</p>
       </div>
     </div>
   ) : null;
@@ -338,20 +377,46 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
               </span>
             )}
           </button>
+
+          {onResetAll && (
+            <>
+              <div className="w-px h-4 bg-gray-700 mx-0.5" />
+              <button
+                onClick={onResetAll}
+                title="Reset all settings to default and clear history"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors text-red-400/60 hover:bg-gray-700 hover:text-red-400"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+                </svg>
+                Reset
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Right pill: Original / Preview */}
+        {/* Right pill: Original / Split / Preview */}
         <div className="bg-gray-800/90 backdrop-blur-md rounded-lg p-1 flex space-x-1 shadow-xl pointer-events-auto border border-gray-700">
           <button
             onClick={() => setViewMode('original')}
-            className={`px-4 py-1.5 text-xs font-bold uppercase rounded transition-colors
+            title="Show original (V)"
+            className={`px-3 py-1.5 text-xs font-bold uppercase rounded transition-colors
               ${viewMode === 'original' ? 'bg-gray-200 text-black' : 'text-gray-400 hover:text-white'}`}
           >
             Original
           </button>
           <button
+            onClick={() => setViewMode(m => m === 'split' ? 'preview' : 'split')}
+            title="Split before/after (X)"
+            className={`px-3 py-1.5 text-xs font-bold uppercase rounded transition-colors
+              ${viewMode === 'split' ? 'bg-amber-400 text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
+          >
+            Split
+          </button>
+          <button
             onClick={() => setViewMode('preview')}
-            className={`px-4 py-1.5 text-xs font-bold uppercase rounded transition-colors
+            title="Show graded preview (V)"
+            className={`px-3 py-1.5 text-xs font-bold uppercase rounded transition-colors
               ${viewMode === 'preview' ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' : 'text-gray-400 hover:text-white'}`}
           >
             Preview

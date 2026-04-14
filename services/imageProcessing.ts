@@ -400,9 +400,9 @@ export const applyGradingToPixel = (
     nb = applyToneMappingChannel(nb, tm);
   }
 
-  // --- 8. FILMIC / AgX BLEND ---
-  if (settings.agxBlend > 0) {
-    [nr, ng, nb] = applyAgxBlend(nr, ng, nb, settings.agxBlend);
+  // --- 8. FILMIC LOOK BLEND ---
+  if (settings.agxBlend > 0 && settings.filmicLook !== 'none') {
+    [nr, ng, nb] = applyAgxBlend(nr, ng, nb, settings.agxBlend, settings.filmicLook);
   }
 
   // --- FINAL CLAMP ---

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { ZoneVector } from '../types';
 import { rgbToWheel, wheelToRGB } from '../services/lutUtils';
 
@@ -56,6 +56,7 @@ const drawWheel = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: num
 export const ColorWheelControl: React.FC<ColorWheelProps> = ({ label, zone, onChange }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragging  = useRef(false);
+  const [showReadout, setShowReadout] = useState(false);
 
   const cx = SIZE / 2;
   const cy = SIZE / 2;
@@ -131,6 +132,7 @@ export const ColorWheelControl: React.FC<ColorWheelProps> = ({ label, zone, onCh
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     dragging.current = true;
+    setShowReadout(true);
     canvasRef.current?.setPointerCapture(e.pointerId);
     pointerToZone(e);
   };
@@ -138,27 +140,57 @@ export const ColorWheelControl: React.FC<ColorWheelProps> = ({ label, zone, onCh
     if (!dragging.current) return;
     pointerToZone(e);
   };
-  const onPointerUp = () => { dragging.current = false; };
+  const onPointerUp = () => { dragging.current = false; setShowReadout(false); };
 
   // Double-click to reset colour to neutral
   const onDoubleClick = () => {
     onChange({ ...zone, r: 0, g: 0, b: 0 });
   };
 
+  // Compute hue (0-360°) and saturation (0-100%) for readout
+  const satPct = Math.round(Math.sqrt(dotX * dotX + dotY * dotY) * 100);
+  // Wheel: hue 0 at top (y+), so hue = atan2(dotY, dotX) offset by +90°
+  const hueAngle = Math.round(((Math.atan2(dotY, dotX) * 180 / Math.PI) + 90 + 360) % 360);
+  const lumPct   = Math.round(zone.l * 100);
+
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <canvas
-        ref={canvasRef}
-        width={SIZE}
-        height={SIZE}
-        className="cursor-crosshair rounded-full"
-        style={{ width: SIZE, height: SIZE }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onDoubleClick={onDoubleClick}
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={SIZE}
+          height={SIZE}
+          className="cursor-crosshair rounded-full"
+          style={{ width: SIZE, height: SIZE }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onDoubleClick={onDoubleClick}
+        />
+        {showReadout && (
+          <div className="absolute inset-0 flex items-end justify-center pb-1 pointer-events-none">
+            <span className="bg-black/70 text-white text-[9px] font-mono px-1.5 py-0.5 rounded-md leading-none">
+              {satPct === 0 ? '—' : `${hueAngle}° ${satPct}%`}
+            </span>
+          </div>
+        )}
+      </div>
       <span className="text-[10px] text-gray-400 uppercase tracking-widest">{label}</span>
+      {/* Luminance offset slider */}
+      <div className="w-full flex items-center gap-1.5 px-1">
+        <span className="text-[9px] text-gray-600 w-3">L</span>
+        <input
+          type="range"
+          min={-0.5}
+          max={0.5}
+          step={0.01}
+          value={zone.l}
+          onChange={e => onChange({ ...zone, l: parseFloat(e.target.value) })}
+          className="flex-1 h-1 appearance-none rounded-full cursor-pointer accent-cyan-400"
+          title="Luminance offset for this zone"
+        />
+        <span className="text-[9px] font-mono text-gray-500 w-7 text-right">{lumPct > 0 ? `+${lumPct}` : lumPct}</span>
+      </div>
     </div>
   );
 };

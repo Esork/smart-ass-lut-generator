@@ -46,6 +46,24 @@ export interface ToneMappingSettings {
 
 export type Colorspace = 'sRGB' | 'Linear' | 'LogAlexa' | 'LogSony' | 'LogC3' | 'Cineon';
 
+export type FilmicLook = 'none' | 'agx' | 'aces' | 'reinhard' | 'hable';
+
+export const FILMIC_LOOK_LABELS: Record<FilmicLook, string> = {
+  none:     'None',
+  agx:      'AgX',
+  aces:     'ACES',
+  reinhard: 'Reinhard',
+  hable:    'Hable',
+};
+
+export const FILMIC_LOOK_DESCRIPTIONS: Record<FilmicLook, string> = {
+  none:     'No filmic processing — pure color grade output.',
+  agx:      'Blender\'s cinematic transform. Natural highlight rolloff, lifted shadows, slightly desaturated.',
+  aces:     'Academy industry standard. High contrast, vivid colors, punchy highlights.',
+  reinhard: 'Simple organic rolloff. Gentle, never clips, slightly warm cast.',
+  hable:    'Uncharted 2 curve. Warm, contrasty, game-friendly look.',
+};
+
 export const COLORSPACE_LABELS: Record<Colorspace, string> = {
   sRGB:     'sRGB',
   Linear:   'Linear',
@@ -92,6 +110,9 @@ export interface LutSettings {
 
   // Phase 2: AgX / Filmic LUT blend (0–100)
   agxBlend: number;
+
+  // Filmic look algorithm to blend toward
+  filmicLook: FilmicLook;
 }
 
 export interface HistoryEntry {
@@ -134,4 +155,5 @@ export const DEFAULT_SETTINGS: LutSettings = {
   },
   colorspace: 'sRGB',
   agxBlend: 0,
+  filmicLook: 'none',
 };

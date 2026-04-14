@@ -1,237 +1,167 @@
-# smart-ass-lut-generator
+# LUT Lab Pro — Architecture Reference
 
-## Current Branch
-feature/color-science-architecture
+## What This Tool Does
 
-## Status: Phase 4 Complete (Partial) ✅
-
-Phase 1 (mixer removal, bypass/reset, web worker) — ✅ Done  
-Phase 2 (color science architecture) — ✅ Done  
-Phase 3 (preset organization) — ✅ Done  
-Phase 4 (LUT loading) — ✅ Infrastructure in place
+Browser-based real-time color grading tool. User uploads an image, applies grading adjustments, and gets back either a graded image PNG or a 32³ LUT PNG they can import into DaVinci Resolve / Premiere / Photoshop. All processing is client-side — no backend.
 
 ---
 
-## Phase 4 Summary
-✅ Created `services/lutFileLoader.ts` to load and parse PNG-based LUT files  
-✅ Support for 1024x32 PNG format (32³ LUT flattened as image)  
-✅ Updated `components/LUTBlendControl.tsx` with file picker and drag-drop UI  
-✅ Added LUT loading state management to App.tsx and Controls.tsx  
-✅ LUT can be loaded, displayed, and tracked in UI  
-⏳ **Next: Integrate LUT blending into rendering pipeline (pass to web worker, apply in shader)**
+## Tech Stack
+
+- React 19 + TypeScript, bundled with Vite
+- Tailwind CSS for styling
+- Web Worker for LUT generation (off main thread)
+- Canvas API for preview rendering
+- Deployed on Vercel (auto-deploy from `main` branch)
 
 ---
 
-## Phase 4 — LUT Loading & Blending Implementation (CONTINUED)
+## File Structure
 
-### Work Items - Completed
-- [x] **Create `services/lutFileLoader.ts`**: Load PNG-based LUTs from file
-- [x] **Update `components/LUTBlendControl.tsx`**: File picker UI with drag-drop
+```
+App.tsx                      # Root: state, undo history, keyboard shortcuts, layout
+types.ts                     # LutSettings, DEFAULT_SETTINGS, FilmicLook, all shared types
+presets.ts                   # Built-in presets (lifestyle / cinematic / film categories)
 
-### Work Items - In Progress (Next Steps)
-- [ ] **Pass LUT through web worker**: Update lutWorker.ts to accept imported LUT data
-- [ ] **Integrate LUT blending into pipeline**: Update applyGradingToPixel to use imported LUT
-- [ ] **Update PreviewArea**: Pass imported LUT to worker for LUT generation
-- [ ] **Preload AgX LUT** on app startup (optional for demo)
+components/
+  Controls.tsx               # Entire right panel: tabs, presets, all controls
+  PreviewArea.tsx            # Left panel: canvas, pan/zoom, split mode, history popup
+  CurveEditor.tsx            # Interactive spline curve (click to add, drag, dbl-click remove)
+  HueCurveEditor.tsx         # Circular hue-range curve editor for secondaries
+  ColorWheelControl.tsx      # Hue/sat color wheel + luminance slider
+  ToneMappingControl.tsx     # Tone mapping sliders with live curve canvas preview
+  ColorspaceSelector.tsx     # Dropdown for input colorspace selection
+  ZoneControls.tsx           # Zone range sliders (Shadow Limit / Highlight Start / Falloff)
+  Slider.tsx                 # Reusable slider: label, value input, optional tooltip
 
-### Acceptance Criteria (Updated)
-- [x] File picker UI allows selecting PNG LUT files
-- [x] Drag-drop loading works
-- [x] UI shows loaded LUT name
-- [ ] User can set blend strength 0-100%
-- [ ] LUT is actually applied to image during rendering
-- [ ] AgX preset with 100% blend shows AgX effect
-- [ ] User can load custom LUT files
-
----
-
-## Phase 5 — Color Science Algorithm Implementation
-
-### Goal
-Implement colorspace conversions and log processing.
-
-### Work Items
-- [ ] **Create `services/colorspaceUtils.ts`**:
-  - `convertSRGBToLinear(rgb)` and back
-  - `convertToLogSpace(rgb, space)` — support Alexa Log, Sony Log, Rec709 Log
-  - `convertFromLogSpace(logRgb, space)` 
-  - `chromaticAdaptation(rgb, currentSpace, targetSpace)`
-  - Matrix operations for color transforms
-
-- [ ] **Extend `services/imageProcessing.ts`**:
-  - Integrate colorspace conversions into pipeline
-  - Process adjustments in appropriate color space (log for shadows/highlights, linear for saturation)
-  - Apply inverse conversion before output
-
-- [ ] **Update `components/ColorspaceSelector.tsx`**:
-  - Show color space info (native primaries, gamma, dynamic range)
-  - Live preview updates when colorspace changes
-  - Tooltip explaining each space
-
-### Acceptance Criteria
-- Switching from sRGB to Log Alexa changes how color wheels affect image
-- Tone mapping behaves perceptually uniform across spaces
-- No color shifts when converting between spaces
+services/
+  imageProcessing.ts         # Pixel pipeline + LUT generation + trilinear interpolation
+  lutWorker.ts               # Web worker wrapper (receives settings, returns LUT Uint8Array)
+  lutUtils.ts                # Filmic look math: AgX, ACES, Reinhard, Hable + blend dispatcher
+  colorspaceUtils.ts         # sRGB / Linear / LogAlexa / LogC3 / LogSony / Cineon conversions
+```
 
 ---
 
-## Phase 6 — Advanced Export & Comparison Features
+## Data Flow
 
-### Goal
-Export graded images and LUTs; enable side-by-side comparison.
-
-### Work Items
-- [ ] **Extend image export**:
-  - Export options: PNG, JPEG, TIFF (16-bit if available)
-  - Include metadata (preset used, settings applied)
-  - "Export at scale" option (1x, 2x original)
-
-- [ ] **LUT export features**:
-  - Export current color grade as 3D LUT (3D cube format)
-  - Support multiple formats: `.cube`, `.haldclut`, `.png`
-  - Save as preset for reuse
-
-- [ ] **Comparison mode**:
-  - Split-screen: Before/After preview
-  - Vertical or horizontal split with draggable divider
-  - Keyboard shortcut (X) to toggle comparison view
-
-- [ ] **Custom preset saving**:
-  - "Save as Custom Preset" button in Presets tab
-  - Edit preset name, description
-  - Store in `presets/custom/` folder (local storage or backend)
-
-### Acceptance Criteria
-- User can export graded image with all adjustments baked in
-- User can export color grade as LUT and apply to another image
-- User can save custom preset and see it in [Custom] preset tab
-- Split-screen comparison shows identical before/after frames
+```
+User adjusts slider
+  → setSettingsWithHistory() in App.tsx (debounced history snapshot)
+    → settings state updates
+      → PreviewArea receives new settings
+        → if not default: postMessage to lutWorker
+          → worker generates 32³ LUT (32768 pixels through the full pipeline)
+            → LUT Uint8Array returned to main thread
+              → applyLutToPixel() trilinear-interpolates every canvas pixel
+                → canvas redraws
+```
 
 ---
 
-## Phase 7 — Performance & UX Refinement
+## Processing Pipeline (per pixel / per LUT cell)
 
-### Goal
-Optimize performance and polish user experience.
+Steps run in order in `imageProcessing.ts`:
 
-### Work Items
-- [ ] **Performance optimization**:
-  - Profile color wheel rendering (may be expensive)
-  - Profile colorspace conversions (may be slow for log)
-  - Add caching for colorspace matrix calculations
-  - Test with 4K image at 60fps slider drags
-
-- [ ] **UX Polish**:
-  - Add keyboard shortcuts: 
-    - `R` — reset current group
-    - `B` — toggle bypass current group
-    - `X` — toggle comparison view
-    - `E` — export image
-    - `V` — toggle preview/original
-  - Add tooltips to all new controls
-  - Add "undo" indicator (show # steps available)
-  - Color wheel should show numeric hue/sat values
-
-- [ ] **Visual refinement**:
-  - Ensure color wheels render smoothly (consider canvas 2D vs SVG)
-  - Make tone mapping curve visible during adjustment
-  - Add visual feedback when colorspace changes
-  - Dim inactive preset categories
-
-### Acceptance Criteria
-- 60fps smooth dragging with color wheels active
-- Keyboard shortcuts work consistently
-- All controls have helpful tooltips
-- No visual lag when switching colorspaces
+1. Input colorspace decode (sRGB → linear working space)
+2. Exposure (2^stops multiplication)
+3. Brightness + Offset (additive lifts)
+4. White Balance (Temperature R/B, Tint G/M)
+5. Contrast (pivot-centered scaling)
+6. Primary Curves (spline: Master → R → G → B)
+7. HSL Secondaries (Hue vs Hue/Sat/Luma, Luma vs Sat)
+8. Zone Corrections (Shadows / Midtones / Highlights RGBL with smooth falloff)
+9. Saturation + Vibrance
+10. Tone Mapping (parametric S-curve: Toe / Shoulder / Knee)
+11. Filmic Look Blend (AgX / ACES / Reinhard / Hable blended at agxBlend%)
 
 ---
 
-## Phase 8 — Testing & Documentation
+## Key Types (`types.ts`)
 
-### Goal
-Ensure quality and make tool accessible.
+```typescript
+interface LutSettings {
+  // Basic
+  exposure, brightness, offset, contrast, pivot
+  temperature, tint, saturation, vibrance
 
-### Work Items
-- [ ] **Testing**:
-  - Color accuracy tests (compare AgX output to reference)
-  - Colorspace conversion tests (sRGB ↔ Linear ↔ Log)
-  - Performance benchmarks (min FPS with all features enabled)
-  - Cross-browser testing (Chrome, Firefox, Safari, Edge)
-  - Mobile responsiveness check
+  // Curves
+  curves: { master, red, green, blue: Point[] }
 
-- [ ] **Documentation**:
-  - README with feature overview
-  - "Getting started" guide (apply preset, adjust sliders, export)
-  - Preset descriptions (what each cinematic/film preset does)
-  - Colorspace guide (when to use which)
-  - Keyboard shortcuts reference
-  - API docs if users want to extend
+  // Secondaries
+  secondaries: { hueVsHue, hueVsSat, hueVsLuma, lumaVsSat: Point[] }
 
-- [ ] **Bug fixes**:
-  - Any edge cases from testing
-  - Color wheel rendering issues
-  - LUT loading failures
-  - Export formatting bugs
+  // Zones
+  zones: {
+    shadows, midtones, highlights: { r, g, b, l: number }
+    ranges: { shadowEnd, highlightStart, falloff: number }
+  }
 
-### Acceptance Criteria
-- All browser tests pass
-- AgX preset output matches reference
-- README is comprehensive and user-friendly
-- No console errors or warnings
+  // Tone Mapping
+  toneMapping: { toe, shoulder, knee: number }
+
+  // Technical
+  colorspace: Colorspace   // 'sRGB' | 'Linear' | 'LogAlexa' | 'LogC3' | 'LogSony' | 'Cineon'
+  filmicLook: FilmicLook   // 'none' | 'agx' | 'aces' | 'reinhard' | 'hable'
+  agxBlend: number         // 0–100, strength of filmic look blend
+}
+```
 
 ---
 
-## Phase 9 — Release & Deployment
+## Controls Panel Layout
 
-### Goal
-Ship to production.
+```
+[Presets] [Basic] [Curves] [Adv]
+  ↓ Advanced tab:
+  [Hue Curves] [Color & Tone] [Technical]
 
-### Work Items
-- [ ] **Build optimization**:
-  - Run production build, check bundle size
-  - Disable dev warnings
-  - Optimize LUT loading (lazy-load if needed)
+  Hue Curves → [HueVsHue | HueVsSat | HueVsLuma | LumaVsSat]
+  Color & Tone → Zone Ranges + Color Wheels + Tone Mapping
+  Technical → [Input Colorspace | Filmic Look]
+```
 
-- [ ] **Hosting**:
-  - Deploy to Vercel/Netlify
-  - Set up custom domain (optional)
-  - Enable HTTPS
-  - Configure CDN caching for LUT files
-
-- [ ] **Release notes**:
-  - Write changelog for Phase 2 features
-  - List known limitations
-  - Ask for user feedback
-
-### Acceptance Criteria
-- Tool is live and publicly accessible
-- Load time < 3 seconds on U.S. East Coast
-- Mobile users can apply presets (even if color wheels are desktop-only)
-- Analytics show user engagement
+Each group has a Reset (↺) and Bypass (👁) icon. Bypass pushes a `previewOverride` to the preview without touching history.
 
 ---
 
-## Definition of "Finished Product"
+## Undo History
 
-✅ User can:
-1. Upload any image
-2. Click a cinematic preset (AgX, Teal&Orange, etc.)
-3. Tune every aspect: color wheels, tone mapping, colorspace, LUT strength
-4. See real-time preview of all adjustments
-5. Export the graded image (PNG/JPEG/TIFF)
-6. Export the color grade as reusable LUT
-7. Save custom presets
-8. Compare before/after side-by-side
-9. Use tool on desktop and mobile
-
-✅ Tool is:
-- Fast (60fps with all features)
-- Professional quality (accurate color science)
-- Intuitive (clear UI, helpful tooltips)
-- Extensible (easy to add new presets/LUTs)
-- Well-documented
+- Kept in both a `useRef` (sync reads) and `useState` (UI updates)
+- `setSettingsWithHistory()`: debounced 600ms — same label within window merges; different label always pushes
+- Max 100 entries (`MAX_HISTORY = 100`)
+- `handleJumpToHistory(index)` — restores to any point, discards future entries
 
 ---
 
-## Next Immediate Step
-Continue **Phase 4** — Integrate loaded LUT into rendering pipeline (pass to web worker, apply trilinear lookup in pixel processing).
+## Filmic Looks (`services/lutUtils.ts`)
+
+All algorithms linearize sRGB first, apply the tone-map, then blend with the original at `agxBlend%`:
+
+- **AgX** — real Sobotka/Blender implementation: inset matrix → log2 encode → sigmoid polynomial → outset matrix → sRGB OETF
+- **ACES** — Hill fitted approximation with exposure=1.8
+- **Reinhard** — Extended Reinhard (L_white=4.0) with exposure=1.0
+- **Hable** — Uncharted 2 curve with exposure=2.0
+
+---
+
+## Preset Categories
+
+- `lifestyle` — Soft Pastel, Golden Hour, Cool & Clean, Moody Muted, Warm Skin, Airy Bright
+- `cinematic` — Teal & Orange, Blade Runner, Matrix, Moonlight, Neon City, Silver Screen, AgX
+- `film` — Kodak Portra 400, Fuji Superia, Kodachrome, DCI P3
+- `custom` — user-saved, persisted in `localStorage` key `lut_lab_custom_presets`
+
+---
+
+## Known VS Code False Positives
+
+The VS Code TypeScript language server sometimes reports `JSX element implicitly has type 'any'` errors after restarts. These are stale server cache issues — `npx tsc --noEmit` always exits clean. Restart the TS server (`Ctrl+Shift+P → TypeScript: Restart TS Server`) to clear them.
+
+---
+
+## Deployment
+
+- `main` branch → Vercel auto-deploy
+- No env vars needed
+- `npm run build` → `/dist` (fully static SPA)

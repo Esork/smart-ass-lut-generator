@@ -4,7 +4,11 @@
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$|src\")",
       "Bash(find c:\\\\\\\\Users\\\\\\\\Scott\\\\\\\\Documents\\\\\\\\smart-ass-lut-generator -type f -name \"*.tsx\" -o -name \"*.ts\" -o -name \"*.json\")",
       "Bash(npx tsc:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(node -e ':*)",
+      "Bash(python3 -c ':*)",
+      "Bash(python -c ':*)",
+      "Bash(cmd /c \"cd c:\\\\Users\\\\Scott\\\\Documents\\\\smart-ass-lut-generator && npx tsc --noEmit 2>&1\")"
     ]
   }
 }

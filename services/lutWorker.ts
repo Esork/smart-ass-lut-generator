@@ -14,16 +14,21 @@ interface WorkerMessage {
 addEventListener('message', (e: MessageEvent<WorkerMessage>) => {
   const { settings, importedLut } = e.data;
 
-  // If an external LUT is loaded and we're blending with it, use it directly
+  // Always generate the color-graded LUT from current settings
+  const generated = generateLutData(settings);
+
   if (importedLut && settings.agxBlend > 0) {
-    const lutData = new Uint8ClampedArray(importedLut.data);
-    // Transfer the imported LUT back
-    postMessage(lutData, [importedLut.data]);
+    // Blend: lerp each channel between generated and imported LUT
+    const imported = new Uint8ClampedArray(importedLut.data);
+    const t = Math.min(1, Math.max(0, settings.agxBlend / 100));
+    const blended = new Uint8ClampedArray(generated.length);
+    for (let i = 0; i < generated.length; i++) {
+      blended[i] = Math.round(generated[i] * (1 - t) + imported[i] * t);
+    }
+    postMessage(blended, [blended.buffer]);
   } else {
-    // Generate LUT from settings
-    const lut = generateLutData(settings);
-    // Transfer the buffer (zero-copy) back to the main thread
-    postMessage(lut, [lut.buffer]);
+    // No imported LUT or blend is 0 — just use the generated LUT
+    postMessage(generated, [generated.buffer]);
   }
 });
 

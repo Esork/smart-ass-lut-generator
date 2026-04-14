@@ -1,4 +1,4 @@
-import { ToneMappingSettings } from '../types';
+import { ToneMappingSettings, FilmicLook } from '../types';
 
 /**
  * LUT utility functions — tone mapping and filmic blend.
@@ -32,7 +32,7 @@ export const applyToneMappingChannel = (v: number, tm: ToneMappingSettings): num
   if (shoulder > 0 && x > knee) {
     const range = 1.0 - knee;
     if (range > 0) {
-      const t = (x - knee) / range; // 0..1 in highlight region
+      const t = Math.min(1, Math.max(0, (x - knee) / range)); // clamp: x>1 would make t>1 → NaN via Math.pow
       const exp = 1.0 + shoulder * 3.0; // 1 (off) → 4 (heavy shoulder)
       const compressed = 1.0 - Math.pow(1.0 - t, exp);
       x = knee + range * compressed;
@@ -42,46 +42,160 @@ export const applyToneMappingChannel = (v: number, tm: ToneMappingSettings): num
   return clamp(x);
 };
 
-// ── AgX / Filmic blend ────────────────────────────────────────────────────────
-// An ACES RRT-inspired filmic S-curve used for the LUT blend feature.
-// Blend = 0 → identity, Blend = 100 → fully filmic.
+// ── AgX tone mapping ──────────────────────────────────────────────────────────
+// Real AgX implementation based on Troy Sobotka's Blender AgX and the
+// minimal GLSL implementation by iolite-engine.
+// Blend = 0 → identity, Blend = 100 → fully AgX.
+
+const srgbToLinear = (v: number): number =>
+  v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+
+const linearToSrgb = (v: number): number =>
+  v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1.0 / 2.4) - 0.055;
 
 /**
- * Hable/Uncharted-2-style filmic curve — maps linear [0..∞] to [0..1].
- * The constants are chosen to produce a warm, contrast-enhancing look.
+ * AgX sigmoid curve approximation — maps [0,1] log-compressed values to [0,1].
+ * Polynomial fit to the Blender "default contrast" AgX look.
  */
-const filmicChannel = (x: number): number => {
-  const A = 0.22, B = 0.30, C = 0.10, D = 0.20, E = 0.01, F = 0.30;
-  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+const agxSigmoid = (x: number): number => {
+  const x2 = x * x;
+  const x4 = x2 * x2;
+  return  15.5   * x4 * x2
+        - 40.14  * x4 * x
+        + 31.96  * x4
+        -  6.868 * x2 * x
+        +  0.4298* x2
+        +  0.1191* x
+        -  0.00232;
 };
 
-const FILMIC_WHITE = filmicChannel(11.2); // reference white point
+const AGX_MIN_EV = -12.47393;
+const AGX_MAX_EV =   4.026069;
 
 /**
- * Apply the filmic curve to a linear-light RGB triple (0–1 normalised).
- * Returns a display-encoded result in the same range.
+ * Apply the real AgX display transform to linear-light sRGB (0–1).
+ * Returns display-encoded sRGB values (0–1), ready for the canvas.
+ *
+ * Pipeline (matches Blender / iolite reference):
+ *   linear sRGB → inset matrix → log2 encode → sigmoid → outset matrix
+ *   → pow(2.2) linearise → sRGB OETF → display
  */
-const filmicTonemap = (r: number, g: number, b: number): [number, number, number] => {
-  const exposure = 2.0; // internal exposure scale — gives ACES-like output
+const applyAgx = (r: number, g: number, b: number): [number, number, number] => {
+  // 1. Inset matrix: sRGB primaries → AgX working space
+  let ar = 0.842479062253094 * r + 0.0423282422610123 * g + 0.0423756549057051 * b;
+  let ag = 0.0784335999999992* r + 0.878468636469772  * g + 0.0784336          * b;
+  let ab = 0.0792237451477643* r + 0.0791661274605434 * g + 0.879142973793104  * b;
+
+  // 2. Log2 encode → normalise to [0, 1]
+  const logEnc = (v: number) =>
+    (Math.max(AGX_MIN_EV, Math.min(AGX_MAX_EV, Math.log2(Math.max(1e-10, v)))) - AGX_MIN_EV)
+    / (AGX_MAX_EV - AGX_MIN_EV);
+
+  ar = agxSigmoid(logEnc(ar));
+  ag = agxSigmoid(logEnc(ag));
+  ab = agxSigmoid(logEnc(ab));
+
+  // 3. Outset matrix: AgX working space → sRGB primaries
+  let or =  1.19687900512017  * ar - 0.0528968517574562 * ag - 0.0529716355144438 * ab;
+  let og = -0.0980208811401368* ar + 1.15190312990417   * ag - 0.0980434501171241 * ab;
+  let ob = -0.0990297440797205* ar - 0.0989611768448433 * ag + 1.15107367264116   * ab;
+
+  // 4. pow(2.2) — linearise from AgX perceptual space
+  or = Math.pow(Math.max(0, or), 2.2);
+  og = Math.pow(Math.max(0, og), 2.2);
+  ob = Math.pow(Math.max(0, ob), 2.2);
+
+  // 5. sRGB OETF — encode for HTML canvas (which interprets values as sRGB)
   return [
-    clamp(filmicChannel(r * exposure) / FILMIC_WHITE),
-    clamp(filmicChannel(g * exposure) / FILMIC_WHITE),
-    clamp(filmicChannel(b * exposure) / FILMIC_WHITE),
+    clamp(linearToSrgb(or)),
+    clamp(linearToSrgb(og)),
+    clamp(linearToSrgb(ob)),
   ];
 };
 
+// ── ACES (Hill RRT+ODT fitted approximation) ──────────────────────────────────
+
 /**
- * Mix the current (graded) RGB with a filmic-tonemapped version.
- * @param r,g,b  Current graded pixel (0–1)
- * @param blend  Blend amount 0–100
+ * Apply ACES RRT+ODT per channel (linear input → linear output).
+ * Fitted approximation by Stephen Hill — accurate to the full ACES transform.
+ */
+const acesChannel = (v: number): number => {
+  const a = v * (v + 0.0245786) - 0.000090537;
+  const b = v * (0.983729 * v + 0.432951) + 0.238081;
+  return a / b;
+};
+
+const applyAces = (r: number, g: number, b: number): [number, number, number] => {
+  // ACES input exposure scale (brings SDR sRGB into ACES-expected range)
+  const exp = 1.8;
+  const or = clamp(linearToSrgb(clamp(acesChannel(r * exp))));
+  const og = clamp(linearToSrgb(clamp(acesChannel(g * exp))));
+  const ob = clamp(linearToSrgb(clamp(acesChannel(b * exp))));
+  return [or, og, ob];
+};
+
+// ── Reinhard (extended, luminance-preserving) ─────────────────────────────────
+
+/**
+ * Extended Reinhard tone map: v*(1+v/L²)/(1+v).
+ * L_white = 4.0 → highlights roll off gently without crushing.
+ */
+const reinhardChannel = (v: number, lWhite = 4.0): number =>
+  (v * (1.0 + v / (lWhite * lWhite))) / (1.0 + v);
+
+const applyReinhard = (r: number, g: number, b: number): [number, number, number] => {
+  const or = clamp(linearToSrgb(clamp(reinhardChannel(r))));
+  const og = clamp(linearToSrgb(clamp(reinhardChannel(g))));
+  const ob = clamp(linearToSrgb(clamp(reinhardChannel(b))));
+  return [or, og, ob];
+};
+
+// ── Hable / Uncharted 2 ───────────────────────────────────────────────────────
+
+/**
+ * Hable/Uncharted-2-style filmic curve. Warm, punchy, game-engine classic.
+ */
+const hableChannel = (x: number): number => {
+  const A = 0.22, B = 0.30, C = 0.10, D = 0.20, E = 0.01, F = 0.30;
+  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+};
+const HABLE_WHITE = hableChannel(11.2);
+
+const applyHable = (r: number, g: number, b: number): [number, number, number] => {
+  const exp = 2.0;
+  const or = clamp(linearToSrgb(clamp(hableChannel(r * exp) / HABLE_WHITE)));
+  const og = clamp(linearToSrgb(clamp(hableChannel(g * exp) / HABLE_WHITE)));
+  const ob = clamp(linearToSrgb(clamp(hableChannel(b * exp) / HABLE_WHITE)));
+  return [or, og, ob];
+};
+
+// ── Multi-look dispatcher ─────────────────────────────────────────────────────
+
+/**
+ * Mix the current graded sRGB pixel with the selected filmic look.
+ * @param r,g,b   Graded pixel, normalised 0–1 (sRGB encoded)
+ * @param blend   0 = untouched, 100 = fully filmic
+ * @param look    Which algorithm to use
  */
 export const applyAgxBlend = (
   r: number, g: number, b: number,
   blend: number,
+  look: FilmicLook = 'agx',
 ): [number, number, number] => {
-  if (blend <= 0) return [r, g, b];
+  if (blend <= 0 || look === 'none') return [r, g, b];
   const t = clamp(blend / 100);
-  const [fr, fg, fb] = filmicTonemap(r, g, b);
+
+  // All algorithms operate on linear light — linearise first
+  const lr = srgbToLinear(clamp(r));
+  const lg = srgbToLinear(clamp(g));
+  const lb = srgbToLinear(clamp(b));
+
+  let fr: number, fg: number, fb: number;
+  if (look === 'aces')     [fr, fg, fb] = applyAces(lr, lg, lb);
+  else if (look === 'reinhard') [fr, fg, fb] = applyReinhard(lr, lg, lb);
+  else if (look === 'hable')    [fr, fg, fb] = applyHable(lr, lg, lb);
+  else /* agx */                [fr, fg, fb] = applyAgx(lr, lg, lb);
+
   return [
     r + (fr - r) * t,
     g + (fg - g) * t,
