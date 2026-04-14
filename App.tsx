@@ -130,6 +130,7 @@ const App: React.FC = () => {
         <PreviewArea
           imageSrc={imageSrc}
           settings={effectiveSettings}
+          importedLut={importedLut}
           onUndo={handleUndo}
           canUndo={history.length > 0}
           history={history}

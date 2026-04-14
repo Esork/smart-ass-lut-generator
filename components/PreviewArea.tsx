@@ -5,6 +5,7 @@ import { applyLutToPixel } from '../services/imageProcessing';
 interface PreviewAreaProps {
   imageSrc: string | null;
   settings: LutSettings;
+  importedLut?: { name: string; size: number; data: Uint8ClampedArray } | null;
   onUndo: () => void;
   canUndo: boolean;
   history: HistoryEntry[];
@@ -35,6 +36,7 @@ const settingsAreDefault = (s: LutSettings) =>
 export const PreviewArea: React.FC<PreviewAreaProps> = ({
   imageSrc,
   settings,
+  importedLut,
   onUndo,
   canUndo,
   history,
@@ -81,16 +83,23 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
 
   // ── LUT generation (debounced 50ms, off main thread) ───────────────────────
   useEffect(() => {
-    if (settingsAreDefault(settings)) {
+    if (settingsAreDefault(settings) && !importedLut) {
       lutRef.current = null;
       setLutVersion(v => v + 1); // trigger draw to show un-graded image
       return;
     }
     const id = setTimeout(() => {
-      workerRef.current?.postMessage(settings);
+      workerRef.current?.postMessage({
+        settings,
+        importedLut: importedLut ? {
+          name: importedLut.name,
+          size: importedLut.size,
+          data: importedLut.data.buffer, // Transfer the buffer
+        } : null,
+      }, importedLut ? [importedLut.data.buffer] : []);
     }, 50);
     return () => clearTimeout(id);
-  }, [settings]);
+  }, [settings, importedLut]);
 
   // ── Canvas sizing ───────────────────────────────────────────────────────────
   const updateCanvasSize = useCallback(() => {
