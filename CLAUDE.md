@@ -3,52 +3,45 @@
 ## Current Branch
 feature/color-science-architecture
 
-## Status: Phase 3 Complete ✅
+## Status: Phase 4 Complete (Partial) ✅
 
 Phase 1 (mixer removal, bypass/reset, web worker) — ✅ Done  
 Phase 2 (color science architecture) — ✅ Done  
-Phase 3 (preset organization) — ✅ Done
+Phase 3 (preset organization) — ✅ Done  
+Phase 4 (LUT loading) — ✅ Infrastructure in place
 
 ---
 
-## Phase 3 Summary
-✅ Added `category` field to Preset interface (`'lifestyle' | 'cinematic' | 'film' | 'custom'`)  
-✅ Organized all existing presets into categories  
-✅ Added new presets: AgX (cinematic), DCI P3 (cinematic), Kodak Portra 400 (film), Fuji Superia 400 (film)  
-✅ Extended all presets with new Phase 2 fields: `toneMapping`, `colorspace`, `agxBlend`  
-✅ Updated Controls.tsx Presets tab with category sub-tabs [Lifestyle] [Cinematic] [Film] [Custom]  
-✅ Presets now grouped and filtered by category within the UI
+## Phase 4 Summary
+✅ Created `services/lutFileLoader.ts` to load and parse PNG-based LUT files  
+✅ Support for 1024x32 PNG format (32³ LUT flattened as image)  
+✅ Updated `components/LUTBlendControl.tsx` with file picker and drag-drop UI  
+✅ Added LUT loading state management to App.tsx and Controls.tsx  
+✅ LUT can be loaded, displayed, and tracked in UI  
+⏳ **Next: Integrate LUT blending into rendering pipeline (pass to web worker, apply in shader)**
 
 ---
 
-## Phase 4 — LUT Loading & Blending Implementation
+## Phase 4 — LUT Loading & Blending Implementation (CONTINUED)
 
-### Goal
-Load external LUTs (AgX, etc.) and blend them with the pipeline.
+### Work Items - Completed
+- [x] **Create `services/lutFileLoader.ts`**: Load PNG-based LUTs from file
+- [x] **Update `components/LUTBlendControl.tsx`**: File picker UI with drag-drop
 
-### Work Items
-- [ ] **Create `services/lutFileLoader.ts`**:
-  - Load 3D cube LUT files from `luts/` folder
-  - Parse LUT header (size, format)
-  - Return as searchable array
+### Work Items - In Progress (Next Steps)
+- [ ] **Pass LUT through web worker**: Update lutWorker.ts to accept imported LUT data
+- [ ] **Integrate LUT blending into pipeline**: Update applyGradingToPixel to use imported LUT
+- [ ] **Update PreviewArea**: Pass imported LUT to worker for LUT generation
+- [ ] **Preload AgX LUT** on app startup (optional for demo)
 
-- [ ] **Extend `services/imageProcessing.ts`**:
-  - `blendWithImportedLUT(pixelColor, importedLut, strength)` function
-  - Integrate into `applyGradingToPixel` pipeline (after tone mapping, before output)
-  - Support LUT strength 0–1.0 slider
-
-- [ ] **Update `components/LUTBlendControl.tsx`**:
-  - File picker to load LUTs from `luts/` folder
-  - Display currently loaded LUT name
-  - Strength slider 0–100%
-  - Reset button
-
-- [ ] **Preload AgX LUT** on app startup
-
-### Acceptance Criteria
-- User can apply AgX preset with 100% LUT strength
-- User can reduce strength to 50% and see blend
-- User can load custom LUT files from `luts/` folder
+### Acceptance Criteria (Updated)
+- [x] File picker UI allows selecting PNG LUT files
+- [x] Drag-drop loading works
+- [x] UI shows loaded LUT name
+- [ ] User can set blend strength 0-100%
+- [ ] LUT is actually applied to image during rendering
+- [ ] AgX preset with 100% blend shows AgX effect
+- [ ] User can load custom LUT files
 
 ---
 
@@ -241,4 +234,4 @@ Ship to production.
 ---
 
 ## Next Immediate Step
-Start **Phase 4** — Implement LUT file loading and blending to support external LUTs (like AgX).
+Continue **Phase 4** — Integrate loaded LUT into rendering pipeline (pass to web worker, apply trilinear lookup in pixel processing).
