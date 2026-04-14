@@ -249,16 +249,7 @@ export const applyGradingToPixel = (
   ng = context.greenLut[idxG2];
   nb = context.blueLut[idxB2];
 
-  // --- 4. CHANNEL MIXER ---
-  const m = settings.mixer;
-  if (m.red.r !== 1 || m.red.g !== 0 || m.green.g !== 1 || m.blue.b !== 1) {
-      const mixedR = (nr * m.red.r) + (ng * m.red.g) + (nb * m.red.b);
-      const mixedG = (nr * m.green.r) + (ng * m.green.g) + (nb * m.green.b);
-      const mixedB = (nr * m.blue.r) + (ng * m.blue.g) + (nb * m.blue.b);
-      nr = mixedR; ng = mixedG; nb = mixedB;
-  }
-
-  // --- 5. SECONDARY CURVES & HSL ---
+  // --- 4. SECONDARY CURVES & HSL ---
   // Do we need HSL conversion? Only if settings differ from default
   const needsHsl = settings.saturation !== 1.0 || settings.vibrance !== 0 || 
                    settings.secondaries.hueVsHue.length > 0 ||
@@ -398,6 +389,96 @@ export const applyGradingToPixel = (
       Math.min(255, Math.max(0, ng * 255)),
       Math.min(255, Math.max(0, nb * 255))
   ];
+};
+
+// ─── LUT-based preview ────────────────────────────────────────────────────────
+// Builds a flat Uint8ClampedArray encoding a 32³ colour cube.
+// Indexed as: (b * 32 * 32 + g * 32 + r) * 3  →  [R, G, B]
+// Generation runs ~32 768 pixels through the full pipeline (≈ 5–15 ms).
+// The preview then does cheap trilinear lookups instead of the full pipeline.
+
+const LUT_SIZE = 32;
+
+export const generateLutData = (settings: LutSettings): Uint8ClampedArray => {
+  const S = LUT_SIZE;
+  const data = new Uint8ClampedArray(S * S * S * 3);
+  const ctx = createProcessingContext(settings);
+
+  for (let bi = 0; bi < S; bi++) {
+    for (let gi = 0; gi < S; gi++) {
+      for (let ri = 0; ri < S; ri++) {
+        const [r, g, b] = applyGradingToPixel(
+          (ri / (S - 1)) * 255,
+          (gi / (S - 1)) * 255,
+          (bi / (S - 1)) * 255,
+          settings,
+          ctx,
+        );
+        const idx = (bi * S * S + gi * S + ri) * 3;
+        data[idx]     = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+      }
+    }
+  }
+  return data;
+};
+
+// Trilinear interpolation inside the 32³ cube. Input r/g/b are 0–255 integers.
+export const applyLutToPixel = (
+  r: number, g: number, b: number,
+  lut: Uint8ClampedArray,
+): [number, number, number] => {
+  const S = LUT_SIZE;
+  const scale = (S - 1) / 255;
+
+  const rf = r * scale;
+  const gf = g * scale;
+  const bf = b * scale;
+
+  const r0 = rf | 0;
+  const g0 = gf | 0;
+  const b0 = bf | 0;
+  const r1 = r0 < S - 1 ? r0 + 1 : r0;
+  const g1 = g0 < S - 1 ? g0 + 1 : g0;
+  const b1 = b0 < S - 1 ? b0 + 1 : b0;
+
+  const rt = rf - r0;
+  const gt = gf - g0;
+  const bt = bf - b0;
+
+  // Pre-multiplied weights for the 8 corners
+  const SS = S * S;
+  const i000 = (b0 * SS + g0 * S + r0) * 3;
+  const i100 = (b0 * SS + g0 * S + r1) * 3;
+  const i010 = (b0 * SS + g1 * S + r0) * 3;
+  const i110 = (b0 * SS + g1 * S + r1) * 3;
+  const i001 = (b1 * SS + g0 * S + r0) * 3;
+  const i101 = (b1 * SS + g0 * S + r1) * 3;
+  const i011 = (b1 * SS + g1 * S + r0) * 3;
+  const i111 = (b1 * SS + g1 * S + r1) * 3;
+
+  const _r0 = 1 - rt, _g0 = 1 - gt, _b0 = 1 - bt;
+
+  const outR =
+    lut[i000]*_r0*_g0*_b0 + lut[i100]*rt*_g0*_b0 +
+    lut[i010]*_r0*gt*_b0  + lut[i110]*rt*gt*_b0  +
+    lut[i001]*_r0*_g0*bt  + lut[i101]*rt*_g0*bt  +
+    lut[i011]*_r0*gt*bt   + lut[i111]*rt*gt*bt;
+
+  const outG =
+    lut[i000+1]*_r0*_g0*_b0 + lut[i100+1]*rt*_g0*_b0 +
+    lut[i010+1]*_r0*gt*_b0  + lut[i110+1]*rt*gt*_b0  +
+    lut[i001+1]*_r0*_g0*bt  + lut[i101+1]*rt*_g0*bt  +
+    lut[i011+1]*_r0*gt*bt   + lut[i111+1]*rt*gt*bt;
+
+  const outB =
+    lut[i000+2]*_r0*_g0*_b0 + lut[i100+2]*rt*_g0*_b0 +
+    lut[i010+2]*_r0*gt*_b0  + lut[i110+2]*rt*gt*_b0  +
+    lut[i001+2]*_r0*_g0*bt  + lut[i101+2]*rt*_g0*bt  +
+    lut[i011+2]*_r0*gt*bt   + lut[i111+2]*rt*gt*bt;
+
+  return [outR, outG, outB];
 };
 
 export const generateLutUrl = (settings: LutSettings): string => {

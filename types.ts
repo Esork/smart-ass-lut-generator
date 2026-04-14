@@ -1,16 +1,4 @@
 
-export interface ChannelMixerChannel {
-  r: number;
-  g: number;
-  b: number;
-}
-
-export interface ChannelMixerSettings {
-  red: ChannelMixerChannel;
-  green: ChannelMixerChannel;
-  blue: ChannelMixerChannel;
-}
-
 export interface Point {
   x: number;
   y: number;
@@ -66,9 +54,6 @@ export interface LutSettings {
   saturation: number;
   vibrance: number; // Smart saturation
   
-  // Channel Mixer
-  mixer: ChannelMixerSettings;
-
   // Curves
   curves: CurveSettings;
 
@@ -77,6 +62,11 @@ export interface LutSettings {
   
   // Advanced: Zones
   zones: ZoneSettings;
+}
+
+export interface HistoryEntry {
+  snapshot: LutSettings;
+  label: string;
 }
 
 export const DEFAULT_SETTINGS: LutSettings = {
@@ -89,11 +79,6 @@ export const DEFAULT_SETTINGS: LutSettings = {
   tint: 0,
   saturation: 1.0,
   vibrance: 0.0,
-  mixer: {
-    red:   { r: 1, g: 0, b: 0 },
-    green: { r: 0, g: 1, b: 0 },
-    blue:  { r: 0, g: 0, b: 1 },
-  },
   curves: {
     master: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
     red: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
